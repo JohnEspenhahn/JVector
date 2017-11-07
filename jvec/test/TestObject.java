@@ -1,3 +1,5 @@
+package test;
+
 import java.io.Serializable;
 
 class TestObject implements Serializable {

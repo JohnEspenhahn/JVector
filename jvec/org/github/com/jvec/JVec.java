@@ -25,15 +25,19 @@
 
 package org.github.com.jvec;
 
+import java.io.BufferedWriter;
+import java.io.FileWriter;
+import java.io.IOException;
+import java.util.Arrays;
+import java.util.Map;
+import java.util.SortedMap;
+
 import org.github.com.jvec.msgpack.core.MessageBufferPacker;
 import org.github.com.jvec.msgpack.core.MessagePack;
 import org.github.com.jvec.msgpack.core.MessageUnpacker;
 import org.github.com.jvec.vclock.VClock;
 
-import java.io.BufferedWriter;
-import java.io.FileWriter;
-import java.io.IOException;
-import java.util.Map;
+import com.espenhahn.jformatter.JFormatter;
 
 /**
  * This is the basic JVec class used in any JVector application.
@@ -49,10 +53,15 @@ public class JVec {
     private VClock vc;
     private String logName;
     private boolean logging;
-    public JVec(String pid, String logName) {
+    
+    public JVec(String logName, String pid, String...otherPIDs) {
+    	this(logName, null, pid, otherPIDs);
+    }
+    
+    public JVec(String logName, JFormatter<? super SortedMap<?,?>> formatter, String pid, String...otherPIDs) {
         this.pid = pid;
         this.logging = true;
-        initJVector(logName);
+        initJVector(logName, formatter, otherPIDs);
     }
 
     /**
@@ -68,18 +77,27 @@ public class JVec {
     public VClock getVc() {
         return vc;
     }
+    
+    // TODO make customizable
+    private String formatContent(String logMsg, byte[] content) {
+    	return logMsg + (Math.abs(Arrays.hashCode(content)) % 100);
+    }
 
     /**
      * Initialise the vector clock class and open a log file.
      */
-    private void initJVector(String logName) {
-
-        this.vc = new VClock();
+    private void initJVector(String logName, JFormatter<? super SortedMap<?,?>> formatter, String... allPIDs) {
+		this.vc = new VClock(formatter);
+        
         this.vc.tick(this.pid);
+        for (String opid: allPIDs)
+        	if (!opid.equals(this.pid))
+        		this.vc.tick(opid);
+        
         this.logging = true;
         this.logName = logName;
         try {
-            FileWriter fw = new FileWriter(logName + "-shiviz.txt");
+            FileWriter fw = new FileWriter(logName);
             BufferedWriter vectorLog = new BufferedWriter(fw);
             vectorLog.close();
         } catch (IOException e) {
@@ -87,12 +105,16 @@ public class JVec {
             e.printStackTrace();
         }
 
-        try {
-            writeLogMsg("Initialization Complete");
-        } catch (IOException e) {
-            System.err.println("Could not write to log file.");
-            e.printStackTrace();
-        }
+//        try {
+//            writeLogMsg("Initialization Complete");
+//        } catch (IOException e) {
+//            System.err.println("Could not write to log file.");
+//            e.printStackTrace();
+//        }
+    }
+    
+    public void setWarnDynamicJoin() {
+    	this.vc.setWarnDynamicJoin();
     }
 
     /**
@@ -150,10 +172,21 @@ public class JVec {
         if (!this.logging) {
             return;
         }
-        FileWriter fw = new FileWriter(this.logName + "-shiviz.txt", true);
+        
+        writeGlobalLogMsg(this.logName, this.vc.returnVCString() + " " + this.pid + " " + logMsg);
+    }
+    
+    public String getLogName() {
+    	return this.logName;
+    }
+    
+    public static void writeGlobalLogMsg(String logName, String logMsg) throws IOException {
+    	FileWriter fw = new FileWriter(logName, true);
         BufferedWriter vectorLog = new BufferedWriter(fw);
-        String vcString = this.pid + " " + this.vc.returnVCString() + "\n" + logMsg + "\n";
-        vectorLog.write(vcString);
+
+        String threadName = Thread.currentThread().getName();
+        vectorLog.write(logMsg  + " @" + threadName + "\n");
+        
         vectorLog.flush();
         vectorLog.close();
     }
@@ -182,7 +215,7 @@ public class JVec {
      * @param packetContent The actual content of the packet we want to send out.
      */
     public synchronized byte[] prepareSend(String logMsg, byte[] packetContent) throws IOException {
-        if (!updateClock(logMsg)) return null;
+        if (!updateClock(formatContent(logMsg, packetContent))) return null;
         MessageBufferPacker packer = MessagePack.newDefaultBufferPacker();
         packer.packString(this.pid);
         packer.packBinaryHeader(packetContent.length);
@@ -257,7 +290,7 @@ public class JVec {
         vc.tick(this.pid);
         mergeRemoteClock(remoteClock);
         try {
-            writeLogMsg(logMsg);
+            writeLogMsg(formatContent(logMsg, decodedMsg));
         } catch (IOException e) {
             System.err.println("Could not write to log file.");
             e.printStackTrace();

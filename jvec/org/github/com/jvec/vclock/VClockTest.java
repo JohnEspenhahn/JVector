@@ -1,13 +1,14 @@
 package org.github.com.jvec.vclock;
 
-import org.junit.Before;
-import org.junit.Test;
+import static org.junit.Assert.assertEquals;
+import static org.junit.Assert.assertTrue;
 
 import java.io.ByteArrayOutputStream;
 import java.io.PrintStream;
-import java.util.TreeMap;
+import java.util.NavigableMap;
 
-import static org.junit.Assert.*;
+import org.junit.Before;
+import org.junit.Test;
 
 public class VClockTest {
     VClock testClock;
@@ -19,10 +20,10 @@ public class VClockTest {
 
     @Test
     public void getClockMap() throws Exception {
-        TreeMap clockMap = testClock.getClockMap();
+        NavigableMap clockMap = testClock.getClockMap();
         assertTrue("The clock map is not empty!",clockMap.entrySet().isEmpty());
         clockMap.put("Proc1", 1);
-        TreeMap clockMap2 = testClock.getClockMap();
+        NavigableMap clockMap2 = testClock.getClockMap();
         assertEquals("The clock map does not contain the expected value!", 1, clockMap2.get("Proc1"));
         assertEquals("The clock map does not contain the expected key!", "Proc1", clockMap2.firstKey());
     }
@@ -30,7 +31,7 @@ public class VClockTest {
     @Test
     public void tick() throws Exception {
         testClock.tick("Proc1");
-        TreeMap clockMap = testClock.getClockMap();
+        NavigableMap clockMap = testClock.getClockMap();
         assertEquals("Key value does not match the expected value!", clockMap.get("Proc1"), 1L);
         assertEquals("Process ID does not conform to the expected key!", clockMap.firstEntry().getKey(), "Proc1");
         testClock.tick("Proc1");
@@ -53,7 +54,7 @@ public class VClockTest {
     @Test
     public void set() throws Exception {
         testClock.set("Proc1", 1);
-        TreeMap clockMap = testClock.getClockMap();
+        NavigableMap clockMap = testClock.getClockMap();
         assertEquals("Key value does not match the expected value!", 1L, clockMap.get("Proc1"));
         assertEquals("Process ID does not conform to the expected key!", "Proc1", clockMap.firstEntry().getKey());
         testClock.set("Proc1", 10);

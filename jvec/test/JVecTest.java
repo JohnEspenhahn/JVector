@@ -1,3 +1,5 @@
+package test;
+
 import org.github.com.jvec.JVec;
 import org.github.com.jvec.vclock.VClock;
 import org.junit.After;

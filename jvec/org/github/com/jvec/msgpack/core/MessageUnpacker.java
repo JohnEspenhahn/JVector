@@ -298,6 +298,7 @@ public class MessageUnpacker
     {
         MessageBuffer next = in.next();
         if (next == null) {
+        	System.exit(1);
             throw new MessageInsufficientBufferException();
         }
         assert (buffer != null);

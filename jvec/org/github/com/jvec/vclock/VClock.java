@@ -27,8 +27,14 @@
 package org.github.com.jvec.vclock;
 
 
+import java.util.Collections;
 import java.util.Map;
+import java.util.NavigableMap;
+import java.util.SortedMap;
 import java.util.TreeMap;
+
+import com.espenhahn.jformatter.JFormatter;
+import com.espenhahn.jformatter.map.JMapFormatter;
 
 /**
  * This is the vector clock class, which contains a map of id and time.
@@ -37,11 +43,33 @@ import java.util.TreeMap;
  */
 public class VClock {
 
-    protected final TreeMap<String, Long> vc;
-
+	private static JFormatter<? super SortedMap<?,?>> DEFAULT_VC_FORMATTER = new JMapFormatter<SortedMap<?,?>>();
+	private final JFormatter<? super SortedMap<?,?>> vcFormatter;
+    private final NavigableMap<String, Long> vc;
+    public final NavigableMap<String, Long> immutableVC;
+    
+    private boolean warnDynamicJoin;
 
     public VClock() {
+    	this(null);
+    }
+
+    public VClock(JFormatter<? super SortedMap<?,?>> vcFormatter) {
         this.vc = clockInit();
+        this.immutableVC = Collections.unmodifiableNavigableMap(this.vc);
+        
+        if (vcFormatter == null) this.vcFormatter = DEFAULT_VC_FORMATTER;
+        else this.vcFormatter = vcFormatter;
+        
+        this.warnDynamicJoin = false;
+    }
+    
+    public void setWarnDynamicJoin() {
+    	this.warnDynamicJoin = true;
+    }
+    
+    private void warnDynamicJoin(String pid) {
+    	System.err.println("Dynamic join of " + pid);
     }
 
     /**
@@ -59,9 +87,12 @@ public class VClock {
      * @param pid The process id as string representation.
      */
     public void tick(String pid) {
-
-        if (this.vc.containsKey(pid)) this.vc.put(pid, this.vc.get(pid) + 1);
-        else this.vc.put(pid, (long) 1);
+        if (getClockMap().containsKey(pid)) {
+        	this.vc.put(pid, getClockMap().get(pid) + 1);
+        } else {
+        	this.vc.put(pid, (long) 1);
+        	if (warnDynamicJoin) this.warnDynamicJoin(pid);
+        }
 
     }
 
@@ -81,14 +112,18 @@ public class VClock {
             ticks = 1;
         }
 
-        if (this.vc.containsKey(pid)) this.vc.put(pid, ticks);
-        else this.vc.put(pid, ticks);
+        if (getClockMap().containsKey(pid)) {
+        	this.vc.put(pid, ticks);
+        } else {
+        	this.vc.put(pid, ticks);
+        	if (warnDynamicJoin) this.warnDynamicJoin(pid);
+        }
     }
 
     /**
      * Returns a copy of the vector clock map. Both clock maps remain valid.
      */
-    public VClock copy() {
+    protected VClock copy() {    	
         VClock clock = new VClock();
         clock.vc.putAll(this.vc);
         return clock;
@@ -102,10 +137,10 @@ public class VClock {
      */
     public long findTicks(String pid) {
 
-        if (!this.vc.containsKey(pid)) {
+        if (!getClockMap().containsKey(pid)) {
             return -1;
         }
-        return this.vc.get(pid);
+        return getClockMap().get(pid);
     }
 
     /**
@@ -115,7 +150,7 @@ public class VClock {
      */
     public long lastUpdate() {
         long last = 0;
-        for (Map.Entry<String, Long> clock : this.vc.entrySet()) {
+        for (Map.Entry<String, Long> clock : getClockMap().entrySet()) {
             if (clock.getValue() > last) {
                 last = clock.getValue();
             }
@@ -132,15 +167,19 @@ public class VClock {
      * @param other The vector clock map to merge with.
      */
     public void merge(VClock other) {
-        for (Map.Entry<String, Long> clock : other.vc.entrySet()) {
-            Long time = this.vc.get(clock.getKey());
+        for (Map.Entry<String, Long> clock : other.getClockMap().entrySet()) {
+            Long time = getClockMap().get(clock.getKey());
             if (time == null) {
-                this.vc.put(clock.getKey(), clock.getValue());
+                this.set(clock.getKey(), clock.getValue());
             } else {
                 if (time < clock.getValue())
-                    this.vc.put(clock.getKey(), clock.getValue());
+                    this.set(clock.getKey(), clock.getValue());
             }
         }
+    }
+    
+    protected JFormatter<? super SortedMap<?,?>> getVCFormatter() {
+    	return this.vcFormatter;
     }
 
     /**
@@ -148,20 +187,7 @@ public class VClock {
      * {"ProcessID 1": Time1, "ProcessID 2": Time2, ...}
      */
     public String returnVCString() {
-        int mapSize = this.vc.size();
-        int i = 0;
-        StringBuilder vcString = new StringBuilder();
-        vcString.append("{");
-        for (Map.Entry<String, Long> clock : this.vc.entrySet()) {
-            vcString.append("\"");
-            vcString.append(clock.getKey());
-            vcString.append("\":");
-            vcString.append(clock.getValue());
-            if (i < mapSize - 1) vcString.append(", ");
-            i++;
-        }
-        vcString.append("}");
-        return vcString.toString();
+        return getVCFormatter().format(getClockMap());
     }
 
     /**
@@ -174,7 +200,7 @@ public class VClock {
     /**
      * Get the current vector clock map.
      */
-    public TreeMap<String, Long> getClockMap() {
-        return this.vc;
+    public NavigableMap<String, Long> getClockMap() {
+        return this.immutableVC;
     }
 }
